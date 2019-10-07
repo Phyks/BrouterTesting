@@ -1,14 +1,18 @@
 BRouter profiles testing
 ========================
 
-Here is an [iPython notebook](https://jupyter.org/) to help test, compare and
+Here is a very simple web application to help test, compare and
 review [BRouter](https://github.com/abrensch/brouter) profiles.
 
-You need to have a working BRouter instance to run the tests against it. The
-notebook should be commented and self-explanatory.
+You need to have a working BRouter instance to run the tests against it. More
+details about the expected `segments` files and configuration is available
+within the webapp.
+
+## Add a new test case
+
+Test cases are stored in a JSON-like structure in the `tests.js` file.
 
 
 ## License
 
-This code is licensed under an MIT license, unless explicitly mentionned
-otherwise.
+This code is licensed under an MIT license.

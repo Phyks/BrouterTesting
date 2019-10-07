@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <meta charset="utf-8">
+        <meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
+        <title>Testing BRouter profiles</title>
+
+        <link rel="stylesheet" href="css/leaflet.css">
+        <style>
+            body {
+                max-width: 800px;
+                margin: auto;
+                font-family: sans-serif;
+                font-size: 14px;
+                text-align: justify;
+            }
+
+            h1 {
+                text-align: center;
+                margin-top: 20px;
+                margin-bottom: 20px;
+            }
+
+            .summary {
+                font-size: 0.8em;
+            }
+
+            .summary li {
+                margin-bottom: 2px;
+            }
+
+            .testcase {
+                margin-bottom: 30px;
+            }
+
+            .map {
+                height: 300px;
+            }
+
+            .footer {
+                font-size: 0.8em;
+                display: flex;
+            }
+
+            .debug {
+                flex: auto;
+                text-align: left;
+            }
+            .back-top {
+                flex: auto;
+                text-align: right;
+            }
+
+            label {
+                display: inline-block;
+                text-align: left;
+            }
+            input[type="text"], textarea {
+                width: 100%;
+                display: inline-block;
+            }
+            textarea {
+                min-height: 300px;
+            }
+            #step2 {
+                display: none;
+            }
+            .center {
+                text-align: center;
+            }
+
+            .error {
+                font-weight: bold;
+                color: red;
+            }
+
+            .footnote {
+                font-size: 0.8em;
+                margin-top: -10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 id="brouter-tester">BRouter profiles tester</h1>
+        <p>Here are some test cases to check <a href="http://brouter.de/">BRouter</a> profiles and help with development of new profiles.</p>
+
+        <p><strong>Important: beware that the map tiles used are the live map tiles (using up to date OSM data) contrary to the BRouter <code>segments4</code> test files which are using a fixed dump of OSM data. Then, the map background may come out of sync with the data used by BRouter and are only there as an eyeguide.</strong></p>
+
+        <p>The map show the route computed with the selected profile (in blue), the route computed by the reference profile (in grey) as well as a route computed by a human (in green). Note that the human route is not necessarily the best one or the unique valid solution.</p>
+
+        <p>The tests assume the BRouter instance uses <a href="https://pub.phyks.me/brouter-testing/segments4/">these <code>segments4</code> files</a> which are built from the <a href="https://download.geofabrik.de/">Geofabrik.de</a> extracts of metropolitan France, New York state (US) and Sachsen state (Germany) from the 10th of November, 2018. The <code>profiles2</code> folder used to build the <code>segments4</code> files is available <a href="https://pub.phyks.me/brouter-testing/profiles2/">here</a> (including the <code>lookups.dat</code> file). The SRTM data used to build the <code>segments4</code> are available <a href="https://pub.phyks.me/brouter-testing/srtm/">here</a>.</p>
+
+
+        <h2>Settings</h2>
+        <form id="settings">
+            <p>
+                <label for="profile">Profile content: </label>
+                <textarea name="profile" id="profile"></textarea>
+            </p>
+            <p>
+                <label for="reference-profile">Reference profile: </label>
+                <input type="text" name="reference_profile" id="reference-profile" value="trekking" />
+            </p>
+            <p>
+                <label for="brouter-url">BRouter URL: </label>
+                <input type="text" name="brouter_url" id="brouter-url" value="http://127.0.0.1:17777" />
+                <p class="footnote">Your BRouter instance should provide <a href="https://developer.mozilla.org/fr/docs/Web/HTTP/CORS">CORS</a> headers. Otherwise, you can use an extension such as <a href="https://addons.mozilla.org/fr/firefox/addon/cors-everywhere/">CORS Everywhere</a>.</p>
+            </p>
+            <p>
+                <label for="brouter-web-url">BRouter web URL (for debug): </label>
+                <input type="text" name="brouter_web_url" id="brouter-web-url" value="http://brouter.de/brouter-web/" />
+            </p>
+            <p>
+                <label for="tile-url">Tile URL: </label>
+                <input type="text" name="tile_url" id="tile-url" value="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+            </p>
+
+            <p class="error" id="error"></p>
+            <p class="center"><input type="submit" value="Run tests"/></p>
+        </form>
+
+        <div id="step2">
+            <h2>Summary</h2>
+            <div class="summary"></div>
+
+            <template class="testcase-template">
+                <div class="testcase">
+                    <p class="description"></p>
+                    <p class="error"></p>
+                    <div class="map"></div>
+                    <div class="footer">
+                        <p class="debug"><a href="">Debug this test case</a></p>
+                        <p class="back-top"><a href="#brouter-tester">Back to top ↑</a></p>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <script src="js/leaflet.js"></script>
+        <script src="tests.js"></script>
+        <script type="text/javascript">
+            document.querySelector('#settings').addEventListener('submit', function (event) {
+                event.preventDefault();
+                document.querySelector('#settings input[type="submit"]').disabled = true;
+
+                var profile = document.querySelector('#profile').value;
+                var referenceProfile = document.querySelector('#reference-profile').value;
+                var brouterUrl = document.querySelector('#brouter-url').value;
+                var brouterWebUrl = document.querySelector('#brouter-web-url').value;
+                var tileUrl = document.querySelector('#tile-url').value;
+
+                if (!profile || !referenceProfile || !brouterUrl || !brouterWebUrl) {
+                    document.querySelector('#error').innerText = 'ERROR: Missing field.';
+                    return;
+                }
+
+                fetch(brouterUrl + '/brouter/profile', {
+                    method : "POST",
+                    body: profile,
+                }).then(function (response) {
+                    return response.json();
+                }).then(function (response) {
+                    var profileId = response['profileid'];
+
+                    document.querySelector('#step2').style.display = 'block';
+
+                    var idx = 0;
+                    Object.keys(TESTS).forEach(function (testCategory) {
+                        var testCategoryID = testCategory.replace(/[^a-zA-Z]/g, "");
+
+                        // Create dedicated section
+                        var h2 = document.createElement('h2');
+                        h2.innerText = testCategory;
+                        h2.id = testCategoryID;
+                        document.body.appendChild(h2);
+
+                        // Handle summary
+                        var summaryTitle = document.createElement('h3');
+                        var summaryTitleLink = document.createElement('a');
+                        summaryTitleLink.href = '#' + testCategoryID;
+                        summaryTitleLink.innerText = testCategory;
+                        summaryTitle.appendChild(summaryTitleLink);
+                        var summaryList = document.createElement('ul');
+                        summaryList.id = testCategoryID + '-summary';
+                        var summary = document.querySelector('.summary');
+                        summary.appendChild(summaryTitle);
+                        summary.appendChild(summaryList);
+
+                        // Handle all test cases
+                        TESTS[testCategory].forEach(function (testCase) {
+                            var startPoint = testCase.start_point;
+                            var endPoint = testCase.end_point;
+
+                            // Update summary
+                            var li = document.createElement('li');
+                            var a = document.createElement('a');
+                            a.href = '#testcase-' + idx;
+                            a.innerText = testCase.description;
+                            li.appendChild(a);
+                            document.querySelector('#' + testCategoryID + '-summary').append(li);
+
+                            // Create entry with map and description
+                            var template = document.querySelector(".testcase-template");
+                            var clone = template.content.cloneNode(true);
+                            clone.querySelector('.map').id = 'map_' + idx;
+                            clone.querySelector('.error').id = 'error_' + idx;
+                            clone.querySelector('.description').id = 'testcase-' + idx;
+                            clone.querySelector('.description').innerText = '→ ' + testCase.description;
+                            clone.querySelector('.debug a').href = (
+                                document.querySelector('#brouter-web-url').value + '/#' +
+                                'map=15/' + startPoint[1] + '/' + startPoint[0] + '/osm&' +
+                                'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
+                                'profile=' + document.querySelector('#reference-profile').value
+                            );
+                            document.body.appendChild(clone);
+
+                            var map = L.map('map_' + idx);
+                            L.tileLayer(tileUrl, {
+                                attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+                                minZoom: 0,
+                                maxZoom: 20,
+                            }).addTo(map);
+                            map.fitBounds(L.latLngBounds(
+                                L.latLng(Math.min(startPoint[1], endPoint[1]), Math.min(startPoint[0], endPoint[0])),
+                                L.latLng(Math.max(startPoint[1], endPoint[1]), Math.max(startPoint[0], endPoint[0]))
+                            ));
+                            if (testCase.human) {
+                                L.geoJSON(testCase.human, { style: { color: '#5CA423' } }).addTo(map);
+                            }
+
+                            function delayFetch(startPoint, endPoint, map, idx) {
+                                return function () {
+                                    fetch(
+                                        brouterUrl + '/brouter?' +
+                                        'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
+                                        'profile=' + profileId + '&' +
+                                        'alternativeidx=0&format=geojson'
+                                    ).then(function (geojson) {
+                                        return geojson.json();
+                                    }).then(function (geojson) {
+                                        L.geoJSON(geojson).addTo(map);
+
+                                        fetch(
+                                            brouterUrl + '/brouter?' +
+                                            'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
+                                            'profile=' + referenceProfile + '&' +
+                                            'alternativeidx=0&format=geojson'
+                                        ).then(function (geojson) {
+                                            return geojson.json();
+                                        }).then(function (geojson) {
+                                            L.geoJSON(geojson, { style: { color: '#666666' } }).addTo(map);
+                                        }).catch(function (error) {
+                                            document.querySelector('#error_' + idx).innerText = 'ERROR: ' + error;
+                                        });
+                                    }).catch(function (error) {
+                                        document.querySelector('#error_' + idx).innerText = 'ERROR: ' + error;
+                                    });
+                                };
+                            }
+
+                            // Overlay route with current profile
+                            setTimeout(delayFetch(startPoint, endPoint, map, idx), idx * 1000);
+
+                            idx += 1;
+                        });
+                    });
+                }).catch(function (exc) {
+                    document.querySelector('#error').innerText = 'ERROR:' + exc;
+                });
+            });
+        </script>
+    </body>
+</html>
