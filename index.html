@@ -47,6 +47,7 @@
                 flex: auto;
                 text-align: left;
             }
+
             .back-top {
                 flex: auto;
                 text-align: right;
@@ -56,16 +57,20 @@
                 display: inline-block;
                 text-align: left;
             }
+
             input[type="text"], textarea {
                 width: 100%;
                 display: inline-block;
             }
+
             textarea {
                 min-height: 300px;
             }
+
             #step2 {
                 display: none;
             }
+
             .center {
                 text-align: center;
             }
@@ -73,6 +78,16 @@
             .error {
                 font-weight: bold;
                 color: red;
+            }
+
+            #status {
+                font-weight: bold;
+                color: blue;
+                text-align: center;
+            }
+
+            #error {
+                text-align: center;
             }
 
             .footnote {
@@ -117,6 +132,7 @@
             </p>
 
             <p class="error" id="error"></p>
+            <p id="status"></p>
             <p class="center"><input type="submit" value="Run tests"/></p>
         </form>
 
@@ -140,7 +156,7 @@
         <script src="js/leaflet.js"></script>
         <script src="tests.js"></script>
         <script type="text/javascript">
-            document.querySelector('#settings').addEventListener('submit', function (event) {
+            document.querySelector('#settings').addEventListener('submit', (event) => {
                 event.preventDefault();
                 document.querySelector('#settings input[type="submit"]').disabled = true;
 
@@ -158,15 +174,17 @@
                 fetch(brouterUrl + '/brouter/profile', {
                     method : "POST",
                     body: profile,
-                }).then(function (response) {
-                    return response.json();
-                }).then(function (response) {
+                }).then(
+                    response => response.json()
+                ).then((response) => {
                     var profileId = response['profileid'];
 
                     document.querySelector('#step2').style.display = 'block';
+                    document.querySelector('#status').innerText = 'Running tests…';
 
                     var idx = 0;
-                    Object.keys(TESTS).forEach(function (testCategory) {
+                    var promisesQueue = Promise.resolve(null);
+                    Object.keys(TESTS).forEach((testCategory) => {
                         var testCategoryID = testCategory.replace(/[^a-zA-Z]/g, "");
 
                         // Create dedicated section
@@ -188,7 +206,7 @@
                         summary.appendChild(summaryList);
 
                         // Handle all test cases
-                        TESTS[testCategory].forEach(function (testCase) {
+                        TESTS[testCategory].forEach((testCase) => {
                             var startPoint = testCase.start_point;
                             var endPoint = testCase.end_point;
 
@@ -231,41 +249,46 @@
 
                             function delayFetch(startPoint, endPoint, map, idx) {
                                 return function () {
-                                    fetch(
-                                        brouterUrl + '/brouter?' +
-                                        'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
-                                        'profile=' + profileId + '&' +
-                                        'alternativeidx=0&format=geojson'
-                                    ).then(function (geojson) {
-                                        return geojson.json();
-                                    }).then(function (geojson) {
-                                        L.geoJSON(geojson).addTo(map);
-
+                                    return new Promise(function (resolve, reject) {
                                         fetch(
                                             brouterUrl + '/brouter?' +
                                             'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
-                                            'profile=' + referenceProfile + '&' +
+                                            'profile=' + profileId + '&' +
                                             'alternativeidx=0&format=geojson'
                                         ).then(function (geojson) {
                                             return geojson.json();
                                         }).then(function (geojson) {
-                                            L.geoJSON(geojson, { style: { color: '#666666' } }).addTo(map);
+                                            L.geoJSON(geojson).addTo(map);
+                                            fetch(
+                                                brouterUrl + '/brouter?' +
+                                                'lonlats=' + startPoint.join(',') + '|' + endPoint.join(',') + '&' +
+                                                'profile=' + referenceProfile + '&' +
+                                                'alternativeidx=0&format=geojson'
+                                            ).then(function (geojson) {
+                                                return geojson.json();
+                                            }).then(function (geojson) {
+                                                L.geoJSON(geojson, { style: { color: '#666666' } }).addTo(map);
+                                                resolve(null);
+                                            });
                                         }).catch(function (error) {
+                                            document.querySelector('#error').innerText = 'ERROR, see test results below.';
+                                            document.querySelector('#status').innerText = '';
                                             document.querySelector('#error_' + idx).innerText = 'ERROR: ' + error;
                                         });
-                                    }).catch(function (error) {
-                                        document.querySelector('#error_' + idx).innerText = 'ERROR: ' + error;
                                     });
                                 };
                             }
 
                             // Overlay route with current profile
-                            setTimeout(delayFetch(startPoint, endPoint, map, idx), idx * 1000);
+                            promisesQueue = promisesQueue.then(delayFetch(startPoint, endPoint, map, idx));
 
                             idx += 1;
                         });
+                        promisesQueue.then(() => {
+                            document.querySelector('#status').innerText = 'All tests done, see individual results below!';
+                        })
                     });
-                }).catch(function (exc) {
+                }).catch((exc) => {
                     document.querySelector('#error').innerText = 'ERROR:' + exc;
                 });
             });
